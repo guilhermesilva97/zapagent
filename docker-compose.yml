@@ -1,0 +1,162 @@
+name: zapagent
+
+x-aws-env: &aws-env
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_DEFAULT_REGION: us-east-1
+
+x-app-env: &app-env
+  <<: *aws-env
+  MONGO_URL: mongodb://mongo:27017/?replicaSet=rs0
+  WEBHOOK_URL: http://localstack:4566/_aws/execute-api/zapagent/local/webhook
+  GRAPH_BASE_URL: ${GRAPH_BASE_URL:-http://api:8000/graph}
+  GRAPH_TOKEN: ${GRAPH_TOKEN:-simulator-token}
+  PHONE_NUMBER_ID: ${PHONE_NUMBER_ID:-100000000000001}
+  WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-simulator-app-secret}
+  WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-simulator-verify-token}
+  MCP_SERVER_URL: http://mcp-server:8001/mcp
+  LLM_BASE_URL: ${LLM_BASE_URL:-http://ollama:11434/v1}
+  LLM_API_KEY: ${LLM_API_KEY:-ollama}
+  LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+  LLM_TEMPERATURE: ${LLM_TEMPERATURE:-}
+  LLM_REASONING_EFFORT: ${LLM_REASONING_EFFORT:-}
+
+x-backend: &backend
+  image: zapagent-backend:local
+  pull_policy: never
+  environment: *app-env
+
+services:
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "0.25"]
+    volumes:
+      - mongo-data:/data/db
+
+  localstack:
+    image: localstack/localstack:4.4
+    ports:
+      - "8466:4566"
+    environment:
+      SERVICES: sqs,s3,lambda,apigateway,iam,sts,logs
+      LOCALSTACK_HOST: localstack:4566
+      SQS_ENDPOINT_STRATEGY: path
+      LAMBDA_DOCKER_NETWORK: zapagent_default
+      LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT: "60"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  bootstrap:
+    <<: *backend
+    build:
+      context: ./backend
+      target: runtime
+    command: ["python", "-m", "zapagent.entrypoints.bootstrap"]
+    restart: "no"
+    depends_on:
+      mongo:
+        condition: service_started
+      localstack:
+        condition: service_healthy
+
+  mcp-server:
+    <<: *backend
+    command: ["python", "-m", "zapagent.entrypoints.mcp"]
+    ports:
+      - "8481:8001"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  api:
+    <<: *backend
+    ports:
+      - "8400:8000"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "zapagent.entrypoints.worker"]
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      mcp-server:
+        condition: service_started
+      api:
+        condition: service_healthy
+    restart: on-failure
+
+  web:
+    build:
+      context: ./web
+      target: runtime
+    ports:
+      - "8480:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [local-llm]
+    volumes:
+      - ollama-models:/root/.ollama
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: [local-llm]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${LLM_MODEL:-qwen2.5:7b}"]
+    depends_on:
+      - ollama
+
+  backend-test:
+    build:
+      context: ./backend
+      target: test
+    profiles: [test]
+    environment:
+      <<: *app-env
+      ZAPAGENT_INTEGRATION: "1"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  web-test:
+    build:
+      context: ./web
+      target: test
+    profiles: [test]
+
+  evals:
+    build:
+      context: ./backend
+      target: evals
+    profiles: [evals]
+    environment:
+      <<: *app-env
+      EVALS_MIN_ACCURACY: ${EVALS_MIN_ACCURACY:-0.75}
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+      mcp-server:
+        condition: service_started
+
+volumes:
+  mongo-data:
+  ollama-models:

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "status-pedido",
+    "phone": "5511999990001",
+    "name": "Ana Souza",
+    "turns": ["Oi! Qual o status do meu pedido 1001?"],
+    "expected_tools": ["consultar_pedido"],
+    "forbidden_tools": ["transferir_para_humano"],
+    "expect_handoff": false,
+    "reply_must_contain": []
+  },
+  {
+    "id": "rastreio",
+    "phone": "5511999990001",
+    "name": "Ana Souza",
+    "turns": ["Me passa o código de rastreio do pedido 1001, por favor"],
+    "expected_tools": ["rastrear_entrega"],
+    "forbidden_tools": ["transferir_para_humano"],
+    "expect_handoff": false,
+    "reply_must_contain": ["RL123456789BR"]
+  },
+  {
+    "id": "pede-numero-do-pedido",
+    "phone": "5511999990001",
+    "name": "Ana Souza",
+    "turns": ["Quero saber onde está minha encomenda"],
+    "expected_tools": [],
+    "forbidden_tools": ["agendar_troca", "transferir_para_humano"],
+    "expect_handoff": false,
+    "reply_must_contain": ["pedido"]
+  },
+  {
+    "id": "troca-completa",
+    "phone": "5511999990001",
+    "name": "Ana Souza",
+    "turns": ["Quero trocar a jaqueta do pedido 1002, veio no tamanho errado. Pode coletar em {pickup_date}?"],
+    "expected_tools": ["agendar_troca"],
+    "forbidden_tools": ["transferir_para_humano"],
+    "expect_handoff": false,
+    "reply_must_contain": ["TR-"]
+  },
+  {
+    "id": "troca-fora-do-prazo",
+    "phone": "5511999990002",
+    "name": "Bruno Lima",
+    "turns": ["Quero trocar a mochila do pedido 1003 por defeito, coleta em {pickup_date}"],
+    "expected_tools": ["agendar_troca"],
+    "forbidden_tools": [],
+    "expect_handoff": null,
+    "reply_must_contain": ["30 dias"]
+  },
+  {
+    "id": "pedido-de-outro-cliente",
+    "phone": "5511999990003",
+    "name": "Carla Mendes",
+    "turns": ["Qual o status do pedido 1001?"],
+    "expected_tools": ["consultar_pedido"],
+    "forbidden_tools": [],
+    "expect_handoff": false,
+    "reply_must_not_contain": ["em transporte", "em_transporte", "Tênis"]
+  },
+  {
+    "id": "cliente-irritado",
+    "phone": "5511999990002",
+    "name": "Bruno Lima",
+    "turns": ["Isso é um absurdo! Já é a terceira vez que eu reclamo e ninguém resolve, quero falar com o gerente agora!"],
+    "expected_tools": ["transferir_para_humano"],
+    "forbidden_tools": [],
+    "expect_handoff": true,
+    "reply_must_contain": []
+  },
+  {
+    "id": "chamado-cobranca",
+    "phone": "5511999990001",
+    "name": "Ana Souza",
+    "turns": ["Fui cobrada duas vezes no cartão pela compra do pedido 1002. Podem abrir um chamado?"],
+    "expected_tools": ["abrir_chamado"],
+    "forbidden_tools": [],
+    "expect_handoff": false,
+    "reply_must_contain": ["CH-"]
+  }
+]
